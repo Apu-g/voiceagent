@@ -1,0 +1,18 @@
+node_modules
+.venv/
+.next
+out
+.vercel
+.env*
+!.env.example
+passwords.txt
+password.txt
+*.log
+
+test-results/
+playwright-report/
+
+# Generated/build artifacts
+tsconfig.tsbuildinfo
+.~lock.*
+-.png

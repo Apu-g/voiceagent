@@ -1,0 +1,2 @@
+# Optional server-side video search dependency
+yt-dlp>=2026.10.26

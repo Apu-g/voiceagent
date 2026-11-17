@@ -1,0 +1,1 @@
+import type {Metadata} from "next";import "./globals.css";export const metadata:Metadata={title:"Explaino | Learn by explaining",description:"EXO, your Class 10 Science voice tutor"};export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en" suppressHydrationWarning><body>{children}</body></html>}
