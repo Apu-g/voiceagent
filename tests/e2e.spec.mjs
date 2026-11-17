@@ -213,7 +213,7 @@ test("YouTube video is selected and embedded inside a chapter lesson",async({pag
  const hub=page.getByTestId("learning-hub");
  await expect(hub.getByText("Sample YouTube embedded lesson")).toBeVisible();
  await hub.getByRole("button",{name:/Sample YouTube embedded lesson/}).click();
- await expect(hub.locator("iframe")).toHaveAttribute("src",/youtube-nocookie\.com\/embed\/M7lc1UVf-VE\?rel=0/);
+ await expect(hub.locator("iframe")).toHaveAttribute("src",/youtube\.com\/embed\/M7lc1UVf-VE\?rel=0/);
  await expect(hub.getByRole("link",{name:/Watch on YouTube/})).toHaveAttribute("href","https://www.youtube.com/watch?v=M7lc1UVf-VE");
  await expect(hub.locator("iframe")).toHaveAttribute("title",/YouTube lesson/);
  await expect(hub.getByRole("alert").getByText("The creator disabled playback on external websites.",{exact:false})).toBeVisible({timeout:8000});
@@ -315,4 +315,33 @@ test("voice replies prefer an installed male voice without paid API calls",async
  expect(chosen.voice).toContain("Microsoft Ravi");
  expect(chosen.rate).toBeLessThan(1);
  expect(chosen.pitch).toBe(1);
+});
+
+test("startup quiz and video fetch errors auto-recover without breaking game submissions",async({page})=>{
+ test.setTimeout(60000);
+ let quizAttempts=0,videoAttempts=0;
+ await page.route("**/api/learning-quiz?*",async route=>{
+  if(route.request().method()==="GET"&&quizAttempts++===0)return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Simulated startup unavailable"})});
+  return route.continue();
+ });
+ await page.route("**/api/videos?*",async route=>{
+  if(videoAttempts++===0)return route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Simulated video startup error"})});
+  return route.continue();
+ });
+ await page.goto("http://localhost:3000");
+ await page.getByRole("button",{name:/Let's learn/i}).click();
+ await expect(page.getByRole("heading",{name:"Your next learning steps"})).toBeVisible({timeout:25000});
+ await page.getByRole("button",{name:"Start lesson"}).click();
+ const hub=page.getByTestId("learning-hub");
+ const quiz=hub.getByTestId("quiz-logic");
+ await expect(quiz.locator("fieldset")).toHaveCount(3,{timeout:25000});
+ expect(quizAttempts).toBeGreaterThanOrEqual(2);
+ await expect(hub.getByText("Finding chapter-specific learning videos…")).toBeHidden({timeout:25000});
+ expect(videoAttempts).toBeGreaterThanOrEqual(2);
+ for(const field of await quiz.locator("fieldset").all())await field.locator("input[type=radio]").first().check();
+ await quiz.getByRole("button",{name:/Check answers/}).click();
+ await expect(quiz.locator(".quiz-final")).toBeVisible({timeout:25000});
+ await expect(quiz.locator(".quiz-final")).toContainText("points");
+ await page.getByRole("button",{name:"My progress dashboard"}).click();
+ await expect(page.getByTestId("student-dashboard")).toBeVisible();
 });

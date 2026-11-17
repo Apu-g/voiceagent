@@ -14,7 +14,7 @@ export function safeVideo(raw:unknown):FoundVideo|null{
  const description=typeof entry.description==="string"?entry.description.slice(0,240):"";
  const durationSeconds=typeof entry.durationSeconds==="number"&&entry.durationSeconds>0&&Number.isFinite(entry.durationSeconds)?entry.durationSeconds:null;
  return {id,title,channel,description,durationSeconds,
-  embedUrl:"https://www.youtube-nocookie.com/embed/"+id+"?rel=0",
+  embedUrl:"https://www.youtube.com/embed/"+id+"?rel=0",
   watchUrl:"https://www.youtube.com/watch?v="+id};
 }
 export async function searchWithYtDlp(query:string,limit=4):Promise<FoundVideo[]>{

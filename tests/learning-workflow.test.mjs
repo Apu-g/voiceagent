@@ -5,7 +5,7 @@ import {buildLaneVisualBrief} from "../lib/lane-visual-brief.ts";
 import {explorerFor} from "../lib/learning-lanes.ts";
 import {explainConversationJourney} from "../lib/conversation-journey.ts";
 import {reserveSpeech,speechLanguage} from "../lib/speech-budget.ts";
-import {earnedAchievement} from "../lib/quiz-progress.ts";
+import {earnedAchievement,saveQuizResult,cachedQuizResult,getQuizResults} from "../lib/quiz-progress.ts";
 test("Three pathways exist and server validates answers for every curriculum topic",()=>{
  for(const c of allConcepts)for(const lane of ["logic","course","future"]){
   const questions=quizFor(c.id,lane);
@@ -63,4 +63,15 @@ test("Sarvam speech quotas and language validation reject excessive usage withou
  assert.equal(reserveSpeech(session,"tts",500),true);
  assert.equal(reserveSpeech(session,"tts",500),false);
  assert.equal(reserveSpeech("bad","stt"),false);
+});
+
+test("offline quiz scores remain readable immediately after submission and best score is retained",async()=>{
+ const sessionId="offline-test-session-ui123",conceptId="circuits",lane="logic";
+ const first=await saveQuizResult({sessionId,conceptId,lane,score:3,total:3,passed:true,points:300});
+ assert.equal(first.record.score,3);assert.equal(first.record.attempts,1);
+ const replay=await saveQuizResult({sessionId,conceptId,lane,score:1,total:3,passed:false,points:100});
+ assert.equal(replay.record.score,3);assert.equal(replay.record.passed,true);assert.equal(replay.record.attempts,2);
+ const immediate=cachedQuizResult(sessionId,conceptId,lane);
+ assert.equal(immediate?.score,3);
+ assert.equal((await getQuizResults(sessionId,conceptId))[0].score,3);
 });

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {safeVideo,searchWithYtDlp} from "../lib/youtube-search.ts";
 test("safe YouTube embeds accept strict video IDs and never trust user-supplied HTML",()=>{
  const video=safeVideo({id:"gDjeEWpyoRA",title:'" onload="evil()',channel:"Science",embedUrl:"https://evil.example/"});
- assert.equal(video.embedUrl,"https://www.youtube-nocookie.com/embed/gDjeEWpyoRA?rel=0");
+ assert.equal(video.embedUrl,"https://www.youtube.com/embed/gDjeEWpyoRA?rel=0");
  assert.equal(video.watchUrl,"https://www.youtube.com/watch?v=gDjeEWpyoRA");
  assert.equal(safeVideo({id:"javascript:alert(1)",title:"Unsafe"}),null);
  assert.equal(safeVideo({id:"../M7lc1UVf-VE"}),null);

@@ -12,7 +12,7 @@ type Lane="logic"|"course"|"future";
 export function LearningHub({concept,detail,sessionId,onPractice,learningFocus}:{concept:Concept;detail:Detail|null;sessionId:string;onPractice:()=>void;learningFocus?:string}){
  const [lane,setLane]=useState<Lane>("logic"),[completed,setCompleted]=useState<Record<string,boolean>>({}),[saving,setSaving]=useState(false),[progressError,setProgressError]=useState(""),[quizPassed,setQuizPassed]=useState<Record<string,boolean>>({}),[watched,setWatched]=useState<string[]>([]);
  const mutationVersion=useRef(0);
- const [videos,setVideos]=useState<VideoOption[]>([]),[videoStatus,setVideoStatus]=useState("idle"),[searchUrl,setSearchUrl]=useState(""),[activeVideo,setActiveVideo]=useState("");
+ const [videos,setVideos]=useState<VideoOption[]>([]),[videoStatus,setVideoStatus]=useState("idle"),[searchUrl,setSearchUrl]=useState(""),[activeVideo,setActiveVideo]=useState(""),[videoRetry,setVideoRetry]=useState(0);
  const info=makeLaneOverview({...concept,keywords:concept.keywords||[]});
  useEffect(()=>{if(!sessionId)return;let alive=true;fetch("/api/achievements?sessionId="+encodeURIComponent(sessionId),{cache:"no-store"}).then(r=>r.json()).then(data=>{if(alive)setQuizPassed(Object.fromEntries((data.quizResults||[]).filter((x:{conceptId:string;passed:boolean})=>x.conceptId===concept.id&&x.passed).map((x:{lane:string})=>[x.lane,true]))) }).catch(()=>{});return()=>{alive=false}},[concept.id,sessionId]);
  useEffect(()=>{
@@ -24,14 +24,27 @@ export function LearningHub({concept,detail,sessionId,onPractice,learningFocus}:
   return()=>{active=false};
  },[concept.id,sessionId]);
  useEffect(()=>{
-  let active=true;
-  queueMicrotask(()=>{if(active){setActiveVideo("");setVideoStatus("loading");setVideos([])}});
-  fetch("/api/videos?conceptId="+encodeURIComponent(concept.id)+(learningFocus?"&focus="+encodeURIComponent(learningFocus):"")).then(r=>r.json()).then(data=>{
-   if(!active)return;
-   setVideos(data.videos||[]);setVideoStatus(data.status||"unavailable");setSearchUrl(data.searchUrl||"");
-  }).catch(()=>{if(active)setVideoStatus("unavailable")});
-  return()=>{active=false};
- },[concept.id,learningFocus]);
+  let active=true,retryTimer:ReturnType<typeof setTimeout>|undefined;
+  const controller=new AbortController();
+  const fallbackUrl="https://www.youtube.com/results?"+new URLSearchParams({search_query:concept.title+" science lesson"});
+  const endpoint="/api/videos?conceptId="+encodeURIComponent(concept.id)+(learningFocus?"&focus="+encodeURIComponent(learningFocus):"");
+  const load=async(attempt:number)=>{
+   try{
+    const response=await fetch(endpoint,{cache:"no-store",signal:controller.signal});
+    const data=await response.json();
+    if(!response.ok)throw Error(data.error||"Video search unavailable");
+    if(!active)return;
+    setVideos(Array.isArray(data.videos)?data.videos:[]);setVideoStatus(data.status||"unavailable");setSearchUrl(data.searchUrl||fallbackUrl);
+   }catch{
+    if(!active||controller.signal.aborted)return;
+    if(attempt<1){retryTimer=setTimeout(()=>load(attempt+1),600);return}
+    setVideoStatus("unavailable");setSearchUrl(fallbackUrl);
+   }
+  };
+  queueMicrotask(()=>{if(active){setActiveVideo("");setVideoStatus("loading");setVideos([]);setSearchUrl(fallbackUrl)}});
+  void load(0);
+  return()=>{active=false;controller.abort();if(retryTimer)clearTimeout(retryTimer)};
+ },[concept.id,concept.title,learningFocus,videoRetry]);
  async function markDone(){
   if(!sessionId||saving)return;
   const desired=!completed[lane];mutationVersion.current++;setSaving(true);setProgressError("");
@@ -70,7 +83,7 @@ export function LearningHub({concept,detail,sessionId,onPractice,learningFocus}:
      <div className="video-list">{videos.map(v=><button className={activeVideo===v.id?"selected":""} key={v.id} onClick={()=>setActiveVideo(v.id)}><PlayIcon/> <span>{v.title}<small>{v.channel} · YouTube</small></span></button>)}</div>
      {activeVideo&&videos.some(v=>v.id===activeVideo)&&<YoutubeLessonPlayer key={activeVideo} video={videos.find(v=>v.id===activeVideo)!} onTryNext={videos.length>1?()=>{const index=videos.findIndex(v=>v.id===activeVideo);setActiveVideo(videos[(index+1)%videos.length].id)}:undefined}/>}
      <p className="lane-footnote">YouTube videos remain hosted by YouTube. Results are algorithmically found, not teacher-reviewed. Playback is not proof of learning.</p>
-    </>:<p>Automatic video discovery is unavailable right now. You can still open YouTube search for this chapter.</p>}
+    </>:<p>Automatic video discovery is unavailable right now. You can still open YouTube search for this chapter. <button type="button" data-testid="videos-retry" onClick={()=>setVideoRetry(n=>n+1)}>Retry video search</button></p>}
    {activeVideo&&<button className="video-reviewed" onClick={async()=>{
     if(!sessionId)return;
     try{const res=await fetch("/api/lesson-progress",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sessionId,conceptId:concept.id,action:"video",videoId:activeVideo})});

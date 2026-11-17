@@ -14,6 +14,7 @@
     "start": "next start",
     "lint": "eslint .",
     "test:workflow": "node scripts/test-workflow.mjs",
+    "test:contracts": "node --import tsx scripts/smoke-quiz-video-apis.mjs",
     "test:e2e": "playwright test tests/e2e.spec.mjs --workers=1",
     "videos:prefetch": "node --import tsx scripts/prefetch-videos.mjs",
     "visuals:export": "node --import tsx scripts/export-lane-visuals.mjs"

@@ -1,5 +1,7 @@
 # Explaino Explore — three learning pathways and private group challenges
 
+**Frontend/game developer handoff:** Read [UI_GAME_INTEGRATION_GUIDE.md](UI_GAME_INTEGRATION_GUIDE.md) and [AGENTS.md](AGENTS.md) before redesigning the UI. The guide documents all endpoints, data schemas, recovery flows, game/quiz state, video fallbacks and integration tests.
+
 The Let's learn roadmap now includes a real-world mission and **EXO Study Arena**. Lessons have three connected pathways:
 
 - **Crack the Logic:** simple foundations and misconceptions.
@@ -7,7 +9,7 @@ The Let's learn roadmap now includes a real-world mission and **EXO Study Arena*
 - **Beyond the Classroom:** real-life missions and related fields, without career predictions.
 
 ## YouTube lesson discovery
-Automatic search now defaults to **yt-dlp** through the server-side Python worker at `scripts/yt_niche_search.py`. Unlike a YouTube Data API search, it requires **no API key**. The worker only searches for video metadata (`ytsearch` with `extract_flat`, `skip_download`) and never downloads media. The server creates validated `youtube-nocookie.com/embed/VIDEO_ID` URLs; do not render arbitrary HTML from a video title. The existing YouTube API is an optional fallback if `YOUTUBE_API_KEY` is configured.
+Automatic search now defaults to **yt-dlp** through the server-side Python worker at `scripts/yt_niche_search.py`. Unlike a YouTube Data API search, it requires **no API key**. The worker only searches for video metadata (`ytsearch` with `extract_flat`, `skip_download`) and never downloads media. The server creates validated `youtube.com/embed/VIDEO_ID` URLs; do not render arbitrary HTML from a video title. The existing YouTube API is an optional fallback if `YOUTUBE_API_KEY` is configured.
 
 ### Local setup (Linux/macOS)
 
@@ -95,64 +97,4 @@ The current app now supports a **mentor conversation → Let's learn → horizon
 
 **Run locally:** `npm install && npm run dev`, then open `http://localhost:3000`.
 
-**Quality checks:** `npm test` (rule/roadmap cases), `npm run lint`, `npm run build`, `npm run test:e2e` (Playwright browser checks; starts the app if needed), and — with the app running — `npm run test:workflow`. For the browser suite, install Chromium once with `npx playwright install chromium`. To test the optional NVIDIA/OpenRouter ambiguity-review path separately, run `node scripts/test-workflow.mjs --with-ai`; it consumes a provider request. To check provider connectivity without printing keys, run `node --env-file=.env.local scripts/check-providers.mjs`.
-
-**Assessment duration:** The roadmap evidence panel displays the analysis provider and response duration in milliseconds; this is a per-request measurement, not a guaranteed latency target. Returning from a lesson to EXO preserves the last roadmap until it is regenerated. The assessment engine distinguishes a student correcting a misconception from immediately demonstrating mastery.
-
-**Models:** NVIDIA defaults to the currently available `nvidia/nemotron-3.5-lightning-30b-a3b`; OpenRouter uses `openrouter/free`. Set `NVIDIA_MODEL` or `OPENROUTER_MODEL` in Vercel if you prefer a specific supported model.
-
----
-
-# Explaino · EXO Voice Tutor
-
-A Vercel-compatible Next.js prototype of an adaptive Class 10 Science tutor, with browser speech-to-text, spoken EXO responses, retrieval from original curated concept notes, an early-stage next-step heuristic, and optional MongoDB session logs.
-
-## Run
-
-```bash
-npm install
-node scripts/setup-env.cjs    # optional: translates your local passwords.txt into .env.local
-npm run dev
-```
-
-Open http://localhost:3000. Chrome/Edge desktop supports browser speech recognition (implementation and network service vary by browser); otherwise use typed input. Browser TTS uses your device voices.
-
-**Security:** Keep `passwords.txt`, `.env.local` and all API keys private. Both files are gitignored. Never configure keys with `NEXT_PUBLIC_`. Review the local generated `.env.local` (without sharing its values) if a provider is not enabled. For Vercel, add `MONGODB_URI`, `GROQ_API_KEY`, `NVIDIA_API_KEY` and `OPENROUTER_API_KEY` as server-side Project Environment Variables, then redeploy. You do not need to upload the secrets file to Vercel.
-
-## Vercel deployment
-
-1. Push the project to a private Git repository. Confirm secrets aren't in tracked files: `git status --short` and `git ls-files`.
-2. Import the repository into Vercel, set the framework preset to Next.js.
-3. Configure the server-side environment variables in Vercel. Ensure the MongoDB Atlas network access policy and database user allow the Vercel runtime to connect. Review production IP/security requirements; avoid opening your database to unrestricted access casually.
-4. Run `npm run build` before deploying. The chat route uses a 30-second maximum duration; providers are tried sequentially with per-provider deadlines.
-5. Configure authentication, persistent rate-limiting, abuse controls, durable background jobs and privacy protections before letting external students use it. This anonymous prototype is **not** production-safe.
-
-## What exists now
-
-- 20 original science concept notes across Class 10 chapters, used as an inexpensive term-based retrieval context. This is **not** embedding RAG and does not ingest full NCERT books.
-- Browser STT (Web Speech API) and speech synthesis. Recognition might send audio to browser-vendor services and is not guaranteed to work offline.
-- Groq → NVIDIA NIM → OpenRouter server-side chat fallbacks, then deterministic study-note fallback.
-- MongoDB for optional anonymous session turn history; app continues working without DB.
-- Quiz / Learn modes and a simple explanatory recommendation heuristic. It **does not** certify concept mastery.
-- JSON catalog, health, chat and session progress endpoints; responsive desktop/mobile UI.
-
-## Routes
-
-- `GET /api/catalog`: chapter and concept data
-- `GET /api/health`: configured provider names and MongoDB reachability, **never** keys
-- `POST /api/chat`: `{message,chapter,conceptId,mode,history,sessionId}`
-- `GET /api/progress?sessionId=...`: anonymous session history (prototype only; do not expose student histories without authentication)
-
-## Tests
-
-```bash
-npm test
-npm run lint
-npm run build
-```
-
-## Limitations and next release requirements
-
-This prototype does **not** provide full NCERT textbooks or PDF ingestion, speech streaming via a custom service, graded/mastery-calibrated evaluation, student account authentication, production rate limiting, or a durable work queue. The teaching context consists of original summaries. The official NCERT textbook portal is linked; copying and distributing copyrighted NCERT textbook contents inside an application requires permission.
-
-For a production learning application: add approved/licensed curriculum content, chapter-aware PDF parsing and embeddings, teacher-reviewed evaluation datasets, mastery evidence rules, user authentication, retention/deletion controls, rate limits via durable storage, and provider quota monitoring.
+**Quality checks:** `npm test` (rule/roadmap cases), `npm run lint`, `npm run build`, `npm run test:e2e` (Playwright browser checks; starts the app if needed), and — with the app running — `npm run test:workflow`. For the browser suite, install Chromium once with `npx playwright install chromium`. To test the optional NVIDIA/OpenRouter ambiguity-review path separately, run `node scripts/test-workflow.mjs --with-ai`; it c

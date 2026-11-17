@@ -4,23 +4,54 @@ export type QuizResult={sessionId:string;conceptId:string;lane:QuizLane;score:nu
 const shared=globalThis as typeof globalThis & {__exoQuizResults?:Map<string,QuizResult>};
 const memory=shared.__exoQuizResults??(shared.__exoQuizResults=new Map<string,QuizResult>());
 const key=(sessionId:string,conceptId:string,lane:QuizLane)=>sessionId+"|"+conceptId+"|"+lane;
-export async function saveQuizResult(result:Omit<QuizResult,"attempts"|"updatedAt">):Promise<QuizResult>{
- const k=key(result.sessionId,result.conceptId,result.lane),col=await collection();
- if(col){
-  // Update only if score is improved; attempts increase on every submission.
-  const current=await col.findOne({sessionId:result.sessionId,conceptId:result.conceptId,lane:result.lane});
-  const best=current&&current.score>result.score?current:result;
-  const record:QuizResult={...result,score:best.score,total:best.total,passed:best.passed,points:best.points,attempts:(current?.attempts||0)+1,updatedAt:new Date().toISOString()};
-  await col.updateOne({sessionId:result.sessionId,conceptId:result.conceptId,lane:result.lane},{$set:record},{upsert:true});return record;
- }
- const prev=memory.get(k),best=prev&&prev.score>result.score?prev:result;
+export function cachedQuizResult(sessionId:string,conceptId:string,lane:QuizLane):QuizResult|undefined{return memory.get(key(sessionId,conceptId,lane))}
+function memorySave(result:Omit<QuizResult,"attempts"|"updatedAt">):QuizResult{
+ const k=key(result.sessionId,result.conceptId,result.lane),prev=memory.get(k);
+ const best=prev&&prev.score>result.score?prev:result;
  const record:QuizResult={...result,score:best.score,total:best.total,passed:best.passed,points:best.points,attempts:(prev?.attempts||0)+1,updatedAt:new Date().toISOString()};
- if(memory.size>5000)memory.clear();memory.set(k,record);return record;
+ if(memory.size>5000)memory.clear();
+ memory.set(k,record);return record;
 }
-async function collection(){try{const db=await getDB();return db?.collection<QuizResult>("quiz_results")||null}catch{return null}}
+export async function saveQuizResult(result:Omit<QuizResult,"attempts"|"updatedAt">):Promise<{record:QuizResult;storage:"mongodb"|"temporary-server-memory"}>{
+ // The quiz itself is always graded by the server. Storage failures do not
+ // prevent a student from finishing the game/quiz in the current session.
+ try{
+  const db=await getDB();
+  if(db){
+   const col=db.collection<QuizResult>("quiz_results");
+   const filter={sessionId:result.sessionId,conceptId:result.conceptId,lane:result.lane};
+   // Atomic best-score and attempt update for concurrently submitted games.
+   // A UNIQUE index on (sessionId,conceptId,lane) is still recommended in
+   // production to guard against simultaneous first-time upserts.
+   const updated=await col.findOneAndUpdate(filter,{
+    $inc:{attempts:1},
+    $max:{score:result.score,points:result.points,passed:result.passed},
+    $set:{total:result.total,updatedAt:new Date().toISOString()}
+   },{upsert:true,returnDocument:"after"});
+   if(!updated)throw Error("Quiz record unavailable after update");
+   const record:QuizResult={sessionId:result.sessionId,conceptId:result.conceptId,lane:result.lane,score:updated.score,total:updated.total,passed:updated.passed,points:updated.points,attempts:updated.attempts,updatedAt:updated.updatedAt};
+   memory.set(key(result.sessionId,result.conceptId,result.lane),record);
+   return {record,storage:"mongodb"};
+  }
+ }catch(e){console.warn("[quiz-progress] persistence unavailable; using temporary memory",e instanceof Error?e.message:"unknown")}
+ return {record:memorySave(result),storage:"temporary-server-memory"};
+}
 export async function getQuizResults(sessionId:string,conceptId?:string):Promise<QuizResult[]>{
- const col=await collection();if(col)return col.find(conceptId?{sessionId,conceptId}:{sessionId}).limit(180).project({_id:0}).toArray() as Promise<QuizResult[]>;
- return [...memory.values()].filter(v=>v.sessionId===sessionId&&(!conceptId||v.conceptId===conceptId));
+ const local=[...memory.values()].filter(v=>v.sessionId===sessionId&&(!conceptId||v.conceptId===conceptId));
+ try{
+  const db=await getDB();
+  if(db){
+   const rows=await db.collection<QuizResult>("quiz_results").find(conceptId?{sessionId,conceptId}:{sessionId}).limit(180).project({_id:0}).toArray() as QuizResult[];
+   // Prefer permanent results but include a recent local fallback after a DB outage.
+   const combined=new Map<string,QuizResult>();
+   for(const row of [...rows,...local]){
+    const k=key(row.sessionId,row.conceptId,row.lane),current=combined.get(k);
+    if(!current||row.updatedAt>current.updatedAt)combined.set(k,row);
+   }
+   return [...combined.values()];
+  }
+ }catch(e){console.warn("[quiz-progress] read unavailable; using temporary memory",e instanceof Error?e.message:"unknown")}
+ return local;
 }
 export function earnedAchievement(results:QuizResult[],explored:{conceptId:string;lanes:Record<string,boolean>}[]){
  const groups=new Map<string,Record<string,boolean>>();
